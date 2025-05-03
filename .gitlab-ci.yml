@@ -31,6 +31,8 @@ release:release:
   needs:
     - job: release:upload
       artifacts: false
+    - job: build
+      artifacts: true
   script: |
     release-cli create \
       --name "$CI_COMMIT_TAG" \
