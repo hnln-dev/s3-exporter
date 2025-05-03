@@ -1,0 +1,41 @@
+---
+
+stages:
+  - build
+  - release
+
+build:
+  stage: build
+  image: golang:1.24.2
+  before_script: go mod download
+  script: ./build.sh
+  artifacts:
+    paths: [bin/$GOOS/$GOARCH]
+
+release:upload:
+  stage: release
+  image: curlimages/curl:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script: |
+    for f in $(find bin -type f -exec basename '{}' \;); do
+      curl -H "JOB-TOKEN: $CI_JOB_TOKEN" --fail --upload-file bin/$f \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/s3-exporter/${CI_COMMIT_TAG}/$f"
+    done
+
+release:release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - job: release:upload
+      artifacts: false
+  script: |
+    release-cli create \
+      --name "$CI_COMMIT_TAG" \
+      --description "s3-exporter $CI_COMMIT_TAG" \
+      --tag-name "$CI_COMMIT_TAG" \
+      $(for f in $(find bin -type f -exec basename '{}' \;); do
+          echo -n --assets-link "{\"name\":\"$f\",\"url\":\"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/s3-exporter/${CI_COMMIT_TAG}/$f\"}" ""
+      done)
